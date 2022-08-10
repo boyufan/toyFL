@@ -41,5 +41,17 @@ class Server(object):
         self.local_epochs = fed_config['E']
         self.batch_size = fed_config['B']
 
+        self.criterion = fed_config['criterion']
+        self.optimizer = fed_config['optimizer']
+        self.optim_config = optim_config
+
+    def setup(self, **init_kwargs):
+        """Set up the configuration for federated learning"""
+
+        assert self._round == 0
+
+        torch.manual_seed(self.seed)
         
+
+
 
