@@ -4,6 +4,7 @@ import os
 import copy
 import random
 import argparse
+from torchvision import datasets
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -16,3 +17,5 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+if __name__ == '__main__':
+    print(type(datasets.__dict__))
