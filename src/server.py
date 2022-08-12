@@ -12,6 +12,7 @@ from tqdm.auto import tqdm
 from collections import OrderedDict
 
 from .utils import *
+from .client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class Server(object):
     """
 
     def __init__(self, writer, model_config={}, global_config={}, data_config={}, init_config={}, fed_config={}, optim_config={}):
-        self.client = None
+        self.clients = None
         self._round = 0
         self.writer = writer
 
@@ -62,7 +63,55 @@ class Server(object):
         del message
         gc.collect()
 
-        # local_datasets, test_dataset = 
+        local_datasets, test_dataset = create_datasets(self.data_path, self.dataset_name, self.num_clients, self.num_shards, self.iid)
+
+        # assign dataset to clients
+        # self.clients = self.
+    
+    def create_clients(self, local_datasets):
+        """Initialize each Client instance"""
+        clients = []
+        for k, dataset in tqdm(enumerate(local_datasets), leave=False):
+            client = Client(client_id=k, local_data=dataset, device=self.device)
+            clients.append(client)
+        
+        message = f"[Round: {str(self._round).zfill(4)}] ...successfully created all {str(self.num_clients)} clients!"
+        print(message); logging.info(message)
+        del message; gc.collect()
+        return clients
+    
+    def setup_clients(self, **client_config):
+        """Set up each client"""
+        for k, client in tqdm(enumerate(self.clients), leave=False):
+            client.setup(**client_config)
+        
+        message = f"[Round: {str(self._round).zfill(4)}] ...successfully finished setup of all {str(self.num_clients)} clients!"
+        print(message); logging.info(message)
+        del message; gc.collect()
+    
+    def transmit_model(self, sample_client_indices=None):
+        """Send the updated global model to selected clients"""
+        if sample_client_indices is None:
+            assert (self._round == 0) or (self._round == self.num_rounds)
+
+            for client in tqdm(self.clients, leave=False):
+                client.model = copy.deepcopy(self.model)
+            
+            message = f"[Round: {str(self._round).zfill(4)}] ...successfully transmitted models to all {str(self.num_clients)} clients!"
+            print(message); logging.info(message)
+            del message; gc.collect()
+        else:
+            assert self._round != 0
+
+            for idx in tqdm(sample_client_indices, leave=False):
+                self.clients[idx].model = copy.deepcopy(self.model)
+            
+            message = f"[Round: {str(self._round).zfill(4)}] ...successfully transmitted models to {str(len(sampled_client_indices))} selected clients!"
+            print(message); logging.info(message)
+            del message; gc.collect()
+    
+    
+
         
         
 
