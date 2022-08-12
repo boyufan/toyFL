@@ -156,4 +156,14 @@ def create_datasets(data_path, dataset_name, num_clients, num_shards, iid):
         
         # how many shards per client
         shards_per_clients = num_shards // num_clients
-        local_datasets = []
+        local_datasets = [
+            CustomTensorDataset(
+                (
+                    torch.cat(shard_inputs_sorted[i, i + shards_per_clients]),
+                    torch.cat(shard_labels_sorted[i:i + shards_per_clients]).long()
+                ),
+                transform=transform
+            )
+            for i in range(0, len(shard_inputs_sorted), shards_per_clients)
+        ]
+    return local_datasets, test_dataset
