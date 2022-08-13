@@ -13,6 +13,10 @@ import torchvision
 
 logger = logging.getLogger(__name__)
 
+def launch_tensor_board(log_path, port, host):
+    os.system(f'tensorboard --logdir={log_path} --port={port} --host={host}')
+    return True
+
 # weight initialization
 def init_weights(model, init_type, init_gain):
     """Function for initializing network weights
