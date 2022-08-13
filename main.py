@@ -1,3 +1,4 @@
+from datetime import datetime
 import numpy as np
 import torch
 import os
@@ -5,17 +6,22 @@ import copy
 import random
 import argparse
 from torchvision import datasets
+import yaml
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='resnet50', help='neural network in the training')
-    parser.add_argument('--epoch', type=int, default='20', help='number of epochs')
-    parser.add_argument('--batchsize', type=int, default='32', help='number of epochs')
-    parser.add_argument('--lr', type=int, default='1e-2', help='learning rate')
-    parser.add_argument('--com_round', type=int, default='50', help='number of epochs')
-    parser.add_argument('--alg', type=str, default='fedavg', help='communication stragegy (fedavg/fedprox)')
-    args = parser.parse_args()
-    return args
 
 if __name__ == '__main__':
-    print(type(datasets.__dict__))
+    # read configuration file
+    # with open('./config.yaml') as c:
+    #     configs = list(yaml.load_all(c, Loader=yaml.FullLoader))
+    # global_config = configs[0]['global_config']
+    # data_config = configs[1]['data_config']
+    # fed_config = configs[2]["fed_config"]
+    # optim_config = configs[3]["optim_config"]
+    # init_config = configs[4]["init_config"]
+    # model_config = configs[5]["model_config"]
+    # log_config = configs[6]["log_config"]
+
+    # # modify log_path to contain current time
+    # log_config['log_path'] = os.path.join(log_config['log_path'], str(datetime.now().strftime('%Y-%m-%d_%H:%M:%S')))
+    print(datetime.now().strftime('%Y-%m-%d_%H:%M:%S'))
+
