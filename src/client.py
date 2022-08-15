@@ -40,19 +40,19 @@ class Client(object):
         self.__model = model
 
     def __len__(self):
-        """Return the size of client's local data"""
+        """Return a total size of the client's local data."""
         return len(self.data)
 
     def setup(self, **client_config):
-        """Set up configuration for each client"""
-        self.dataloader = DataLoader(self.data, batch_size=client_config['batch_size'], shuffle=True)
-        self.local_epoch = client_config['num_local_epochs']
-        self.criterion = client_config['criterion']
-        self.optimizer = client_config['optimizer']
-        self.optim_config = client_config['optim_config']
+        """Set up common configuration of each client; called by center server."""
+        self.dataloader = DataLoader(self.data, batch_size=client_config["batch_size"], shuffle=True)
+        self.local_epoch = client_config["num_local_epochs"]
+        self.criterion = client_config["criterion"]
+        self.optimizer = client_config["optimizer"]
+        self.optim_config = client_config["optim_config"]
 
     def client_update(self):
-        """update local model using local data"""
+        """Update local model using local dataset."""
         self.model.train()
         self.model.to(self.device)
 
@@ -60,17 +60,19 @@ class Client(object):
         for e in range(self.local_epoch):
             for data, labels in self.dataloader:
                 data, labels = data.float().to(self.device), labels.long().to(self.device)
-
+  
                 optimizer.zero_grad()
                 outputs = self.model(data)
-                # 为什么要在中间加一个括号
                 loss = eval(self.criterion)()(outputs, labels)
 
                 loss.backward()
-                optimizer.step()
-    
+                optimizer.step() 
+
+                if self.device == "cuda": torch.cuda.empty_cache()               
+        self.model.to("cpu")
+
     def client_evaluate(self):
-        """Evaluate local model using local dataset"""
+        """Evaluate local model using local dataset (same as training set for convenience)."""
         self.model.eval()
         self.model.to(self.device)
 
@@ -80,21 +82,20 @@ class Client(object):
                 data, labels = data.float().to(self.device), labels.long().to(self.device)
                 outputs = self.model(data)
                 test_loss += eval(self.criterion)()(outputs, labels).item()
-
+                
                 predicted = outputs.argmax(dim=1, keepdim=True)
                 correct += predicted.eq(labels.view_as(predicted)).sum().item()
+
+                if self.device == "cuda": torch.cuda.empty_cache()
+        self.model.to("cpu")
 
         test_loss = test_loss / len(self.dataloader)
         test_accuracy = correct / len(self.data)
 
-        message = f'\t[Client {str(self.id).zfill(4)}] finished evaluation!\
-            \n\t=> Test loss: {100. * test_loss:.f}\
-            \n\t=> Test accuracy: {100. * test_accuracy:.2f}%\n'
-        print(message, flush=True)
-        logging.info(message)
+        message = f"\t[Client {str(self.id).zfill(4)}] ...finished evaluation!\
+            \n\t=> Test loss: {test_loss:.4f}\
+            \n\t=> Test accuracy: {100. * test_accuracy:.2f}%\n"
+        print(message, flush=True); logging.info(message)
         del message; gc.collect()
 
         return test_loss, test_accuracy
-
-
-    

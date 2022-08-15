@@ -1,6 +1,5 @@
 import os
 import logging
-from random import shuffle
 
 import numpy as np
 import torch
@@ -13,22 +12,36 @@ import torchvision
 
 logger = logging.getLogger(__name__)
 
+
+#######################
+# TensorBaord setting #
+#######################
 def launch_tensor_board(log_path, port, host):
-    os.system(f'tensorboard --logdir={log_path} --port={port} --host={host}')
+    """Function for initiating TensorBoard.
+    
+    Args:
+        log_path: Path where the log is stored.
+        port: Port number used for launching TensorBoard.
+        host: Address used for launching TensorBoard.
+    """
+    os.system(f"tensorboard --logdir={log_path} --port={port} --host={host}")
     return True
 
-# weight initialization
+#########################
+# Weight initialization #
+#########################
 def init_weights(model, init_type, init_gain):
-    """Function for initializing network weights
+    """Function for initializing network weights.
     
     Args:
         model: A torch.nn instance to be initialized.
-        init_type: Name of an initialization method.
+        init_type: Name of an initialization method (normal | xavier | kaiming | orthogonal).
         init_gain: Scaling factor for (normal | xavier | orthogonal).
-
+    
+    Reference:
+        https://github.com/DS3Lab/forest-prediction/blob/master/pix2pix/models/networks.py
     """
     def init_func(m):
-        # 获取类名
         classname = m.__class__.__name__
         if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
             if init_type == 'normal':
@@ -38,18 +51,17 @@ def init_weights(model, init_type, init_gain):
             elif init_type == 'kaiming':
                 init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
             else:
-                raise NotImplementedError(f'[ERROR] initialization method is not implemented!')
+                raise NotImplementedError(f'[ERROR] ...initialization method [{init_type}] is not implemented!')
             if hasattr(m, 'bias') and m.bias is not None:
                 init.constant_(m.bias.data, 0.0)
         
         elif classname.find('BatchNorm2d') != -1 or classname.find('InstanceNorm2d') != -1:
             init.normal_(m.weight.data, 1.0, init_gain)
-            init.constant_(m.bias.data, 0.0)
+            init.constant_(m.bias.data, 0.0)   
     model.apply(init_func)
-    
 
 def init_net(model, init_type, init_gain, gpu_ids):
-    """Function for initializing network weights
+    """Function for initializing network weights.
     
     Args:
         model: A torch.nn.Module to be initialized
@@ -59,7 +71,6 @@ def init_net(model, init_type, init_gain, gpu_ids):
     
     Returns:
         An initialized torch.nn.Module instance.
-
     """
     if len(gpu_ids) > 0:
         assert(torch.cuda.is_available())
@@ -68,66 +79,78 @@ def init_net(model, init_type, init_gain, gpu_ids):
     init_weights(model, init_type, init_gain)
     return model
 
+#################
+# Dataset split #
+#################
 class CustomTensorDataset(Dataset):
-    """TensorDataset with support of transforms"""
+    """TensorDataset with support of transforms."""
     def __init__(self, tensors, transform=None):
         assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors)
         self.tensors = tensors
         self.transform = transform
-    
+
     def __getitem__(self, index):
         x = self.tensors[0][index]
         y = self.tensors[1][index]
         if self.transform:
             x = self.transform(x.numpy().astype(np.uint8))
         return x, y
-    
+
     def __len__(self):
         return self.tensors[0].size(0)
 
 def create_datasets(data_path, dataset_name, num_clients, num_shards, iid):
-    """split the dataset in iid or non-iid fashion"""
+    """Split the whole dataset in IID or non-IID manner for distributing to clients."""
+    dataset_name = dataset_name.upper()
+    # get dataset from torchvision.datasets if exists
     if hasattr(torchvision.datasets, dataset_name):
-        if dataset_name in ['CIFAR10']:
+        # set transformation differently per dataset
+        if dataset_name in ["CIFAR10"]:
             transform = torchvision.transforms.Compose(
-                [transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+                [
+                    torchvision.transforms.ToTensor(),
+                    torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                ]
             )
-        elif dataset_name in ['MNIST']:
-            transform = transforms.ToTensor()
+        elif dataset_name in ["MNIST"]:
+            transform = torchvision.transforms.ToTensor()
         
-        training_dataset = datasets.__dict__[dataset_name](
+        # prepare raw training & test datasets
+        training_dataset = torchvision.datasets.__dict__[dataset_name](
             root=data_path,
             train=True,
             download=True,
             transform=transform
         )
-
-        test_dataset = datasets.__dict__[dataset_name](
+        test_dataset = torchvision.datasets.__dict__[dataset_name](
             root=data_path,
             train=False,
             download=True,
             transform=transform
         )
     else:
-        error_message = f'dataset {dataset_name} is not supported'
+        # dataset not found exception
+        error_message = f"...dataset \"{dataset_name}\" is not supported or cannot be found in TorchVision Datasets!"
         raise AttributeError(error_message)
-    
-    if training_dataset.data.ndim == 3:
+
+    # unsqueeze channel dimension for grayscale image datasets
+    if training_dataset.data.ndim == 3: # convert to NxHxW -> NxHxWx1
         training_dataset.data.unsqueeze_(3)
     num_categories = np.unique(training_dataset.targets).shape[0]
-
-    if 'ndarray' not in str(type(training_dataset.data)):
-        training_dataset.data = np.asarray(training_dataset)
-    if 'list' not in str(type(training_dataset.targets)):
+    
+    if "ndarray" not in str(type(training_dataset.data)):
+        training_dataset.data = np.asarray(training_dataset.data)
+    if "list" not in str(type(training_dataset.targets)):
         training_dataset.targets = training_dataset.targets.tolist()
     
+    # split dataset according to iid flag
     if iid:
-        # return a random permutation
-        shuffle_indices = torch.randperm(len(training_dataset))
-        training_inputs = training_dataset.data[shuffle_indices]
-        training_labels = torch.Tensor(training_dataset.targets)[shuffle_indices]
+        # shuffle data
+        shuffled_indices = torch.randperm(len(training_dataset))
+        training_inputs = training_dataset.data[shuffled_indices]
+        training_labels = torch.Tensor(training_dataset.targets)[shuffled_indices]
 
+        # partition data into num_clients
         split_size = len(training_dataset) // num_clients
         split_datasets = list(
             zip(
@@ -136,38 +159,44 @@ def create_datasets(data_path, dataset_name, num_clients, num_shards, iid):
             )
         )
 
+        # finalize bunches of local datasets
         local_datasets = [
             CustomTensorDataset(local_dataset, transform=transform)
             for local_dataset in split_datasets
-        ]
+            ]
     else:
+        # sort data by labels
         sorted_indices = torch.argsort(torch.Tensor(training_dataset.targets))
-        training_inputs = training_dataset[sorted_indices]
+        training_inputs = training_dataset.data[sorted_indices]
         training_labels = torch.Tensor(training_dataset.targets)[sorted_indices]
 
-        # partition data into shards
-        shard_size = len(training_dataset) // num_shards
+        # partition data into shards first
+        shard_size = len(training_dataset) // num_shards #300
         shard_inputs = list(torch.split(torch.Tensor(training_inputs), shard_size))
         shard_labels = list(torch.split(torch.Tensor(training_labels), shard_size))
 
+        # sort the list to conveniently assign samples to each clients from at least two classes
         shard_inputs_sorted, shard_labels_sorted = [], []
-        # num_shards // num_categories指每一类有多少shards
-        # 下面这个循环保证了每个shard取到的都是相邻的两个类
         for i in range(num_shards // num_categories):
             for j in range(0, ((num_shards // num_categories) * num_categories), (num_shards // num_categories)):
+                # num_shards // num_categories指每一类有多少shards
+                # 下面这个循环保证了每个shard取到的都是相邻的两个类
                 shard_inputs_sorted.append(shard_inputs[i + j])
                 shard_labels_sorted.append(shard_labels[i + j])
-        
-        # how many shards per client
+                
+        # finalize local datasets by assigning shards to each client
         shards_per_clients = num_shards // num_clients
         local_datasets = [
             CustomTensorDataset(
                 (
-                    torch.cat(shard_inputs_sorted[i, i + shards_per_clients]),
+                    torch.cat(shard_inputs_sorted[i:i + shards_per_clients]),
                     torch.cat(shard_labels_sorted[i:i + shards_per_clients]).long()
                 ),
                 transform=transform
-            )
+            ) 
             for i in range(0, len(shard_inputs_sorted), shards_per_clients)
         ]
     return local_datasets, test_dataset
+
+
+

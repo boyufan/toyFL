@@ -25,7 +25,8 @@ optim_config:
 init_config:
   init_type: "xavier"
   init_gain: 1.0
-  gpu_ids: [0, 1, 2]
+  # gpu_ids: [0, 1, 2]
+  gpu_ids: []
 ---
 model_config: 
   #name: TwoNN
